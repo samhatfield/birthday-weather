@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify
-from iris import load_cube, Constraint
-from iris.analysis import Linear
+from flask import Flask, request, jsonify, abort
 from datetime import datetime
+from netCDF4 import Dataset
+from numpy import array_str, transpose
+from scipy.interpolate import interp2d
 
 app = Flask(__name__)
 
@@ -9,18 +10,38 @@ app = Flask(__name__)
 @app.route('/precipitation')
 def precipitation():
     # Parse request
-    date = datetime.strptime(request.args.get('date'), '%Y-%m-%d')
-    lat = request.args.get('latitude')
-    lon = request.args.get('longitude')
+    datestr = request.args.get('date')
+    latstr = request.args.get('latitude')
+    lonstr = request.args.get('longitude')
 
-    # Open relevant cube
-    cube = load_cube(f'{date.year}.nc', 'Total precipitation').extract(Constraint(time=date))
+    # Validate input arguments
+    if datestr == None or latstr == None or lonstr == None:
+        abort(404)
+
+    # Convert inputs
+    date = datetime.strptime(datestr, '%Y-%m-%d')
+    lat = float(latstr)
+    lon = float(lonstr)
+
+    # Open relevant dataset and extract variables/dimensions
+    dataset = Dataset(f'data/{date.year}.nc')
+    latitude = dataset.variables['latitude'][:]
+    longitude = dataset.variables['longitude'][:]
+
+    # Get index of requested day
+    day = get_day_of_year(date)
+
+    # Extract precipitation record for that day
+    precip = transpose(dataset.variables['tp'][day,:,:])
 
     # Interpolate to requested coordinates
-    precip = 1000.0*cube.interpolate([('latitude', lat), ('longitude', lon)], Linear()).data
+    interp_precip = interp2d(latitude, longitude, precip)
 
     # Return result
-    return jsonify(precip)
+    return jsonify(interp_precip(lat, lon)[0])
+
+def get_day_of_year(datetime_in):
+    return (datetime_in - datetime(datetime_in.year, 1, 1)).days
 
 if __name__ == '__main__':
     app.run(port='5002')
