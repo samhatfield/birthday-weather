@@ -24,7 +24,7 @@ def precipitation():
     lon = float(lonstr)
 
     # Open relevant dataset and extract variables/dimensions
-    dataset = Dataset(f'data/{date.year}.nc')
+    dataset = Dataset(f'{app.root_path}/data/{date.year}.nc')
     latitude = dataset.variables['latitude'][:]
     longitude = dataset.variables['longitude'][:]
 
